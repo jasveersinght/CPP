@@ -1,0 +1,204 @@
+{% extends 'base.html' %}
+{% block title %}{% if active_role == 'host' %}Admin Login{% else %}Team Login{% endif %} | MATH AUCTION{% endblock %}
+
+{% block content %}
+<div style="max-width: 480px; margin: 2.5rem auto;">
+  <div id="login-card" class="card login-card {% if active_role == 'host' %}host-mode{% else %}team-mode{% endif %}" style="padding: 2rem;">
+
+    <!-- Segmented Role Switcher Tabs -->
+    <div class="login-tabs" role="tablist">
+      <button type="button" 
+              id="tab-btn-team" 
+              class="login-tab-btn {% if active_role != 'host' %}active team-active{% endif %}" 
+              onclick="switchRole('team')"
+              role="tab"
+              aria-selected="{% if active_role != 'host' %}true{% else %}false{% endif %}">
+        <span>🏆</span> Team Login
+      </button>
+      <button type="button" 
+              id="tab-btn-host" 
+              class="login-tab-btn {% if active_role == 'host' %}active host-active{% endif %}" 
+              onclick="switchRole('host')"
+              role="tab"
+              aria-selected="{% if active_role == 'host' %}true{% else %}false{% endif %}">
+        <span>⚙️</span> Admin Login
+      </button>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- 1. TEAM LOGIN SECTION                      -->
+    <!-- ========================================== -->
+    <div id="section-team-login" style="display: {% if active_role == 'host' %}none{% else %}block{% endif %};">
+      <div style="text-align: center; margin-bottom: 1.5rem;">
+        <div style="font-size: 2.4rem; margin-bottom: 0.35rem;">🏆</div>
+        <h1 style="font-size: 1.55rem; font-weight: 800; color: #fff;">Team Portal</h1>
+        <p style="color: var(--text-secondary); font-size: 0.88rem; margin-top: 0.25rem;">
+          Enter your team credentials to participate in the live auction
+        </p>
+      </div>
+
+      <form method="POST" action="{{ url_for('auth.login') }}" id="form-team">
+        <input type="hidden" name="role" value="team">
+
+        <div class="form-group">
+          <label class="form-label" for="team_code">Team Code</label>
+          <input type="text" 
+                 id="team_code" 
+                 name="team_code" 
+                 class="form-control" 
+                 placeholder="e.g. TEAM001" 
+                 required 
+                 {% if active_role != 'host' %}autofocus{% endif %}
+                 style="text-transform: uppercase;">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="team_password">Password</label>
+          <input type="password" 
+                 id="team_password" 
+                 name="password" 
+                 class="form-control" 
+                 placeholder="••••••••" 
+                 required>
+        </div>
+
+        <div style="margin-top: 1.75rem;">
+          <button type="submit" class="btn btn-gold" style="width: 100%; padding: 0.85rem; font-size: 1.05rem;">
+            Enter Tournament Dashboard &rarr;
+          </button>
+        </div>
+      </form>
+
+      <div style="text-align: center; margin-top: 1.5rem; border-top: 1px solid var(--border-color); padding-top: 1rem;">
+        <span style="color: var(--text-muted); font-size: 0.85rem;">Tournament Administrator?</span>
+        <button type="button" 
+                onclick="switchRole('host')" 
+                style="background: none; border: none; color: var(--accent-blue); font-size: 0.85rem; font-weight: 600; cursor: pointer; text-decoration: underline; margin-left: 0.3rem;">
+          Switch to Admin Login &rarr;
+        </button>
+      </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- 2. ADMIN / HOST LOGIN SECTION              -->
+    <!-- ========================================== -->
+    <div id="section-host-login" style="display: {% if active_role == 'host' %}block{% else %}none{% endif %};">
+      <div style="text-align: center; margin-bottom: 1.5rem;">
+        <div style="font-size: 2.4rem; margin-bottom: 0.35rem;">⚙️</div>
+        <h1 style="font-size: 1.55rem; font-weight: 800; color: #fff;">Admin Control Room</h1>
+        <p style="color: var(--text-secondary); font-size: 0.88rem; margin-top: 0.25rem;">
+          Tournament Director & Host Administrator Authentication
+        </p>
+      </div>
+
+      <form method="POST" action="{{ url_for('auth.login') }}" id="form-host">
+        <input type="hidden" name="role" value="host">
+
+        <div class="form-group">
+          <label class="form-label" for="host_username">Admin Username</label>
+          <input type="text" 
+                 id="host_username" 
+                 name="username" 
+                 class="form-control" 
+                 placeholder="e.g. admin" 
+                 required 
+                 {% if active_role == 'host' %}autofocus{% endif %}>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="host_password">Admin Password</label>
+          <input type="password" 
+                 id="host_password" 
+                 name="password" 
+                 class="form-control" 
+                 placeholder="••••••••" 
+                 required>
+        </div>
+
+        <div style="margin-top: 1.75rem;">
+          <button type="submit" class="btn btn-primary" style="width: 100%; padding: 0.85rem; font-size: 1.05rem;">
+            Access Host Control Dashboard &rarr;
+          </button>
+        </div>
+      </form>
+
+      <div style="text-align: center; margin-top: 1.5rem; border-top: 1px solid var(--border-color); padding-top: 1rem;">
+        <span style="color: var(--text-muted); font-size: 0.85rem;">Student Participant Team?</span>
+        <button type="button" 
+                onclick="switchRole('team')" 
+                style="background: none; border: none; color: var(--accent-gold); font-size: 0.85rem; font-weight: 600; cursor: pointer; text-decoration: underline; margin-left: 0.3rem;">
+          Switch to Team Login &rarr;
+        </button>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+  function switchRole(role) {
+    const card = document.getElementById('login-card');
+    const tabTeam = document.getElementById('tab-btn-team');
+    const tabHost = document.getElementById('tab-btn-host');
+    const secTeam = document.getElementById('section-team-login');
+    const secHost = document.getElementById('section-host-login');
+
+    if (role === 'host') {
+      secTeam.style.display = 'none';
+      secHost.style.display = 'block';
+
+      tabHost.classList.add('active', 'host-active');
+      tabTeam.classList.remove('active', 'team-active');
+
+      tabHost.setAttribute('aria-selected', 'true');
+      tabTeam.setAttribute('aria-selected', 'false');
+
+      card.classList.remove('team-mode');
+      card.classList.add('host-mode');
+
+      const hostInput = document.getElementById('host_username');
+      if (hostInput) hostInput.focus();
+
+      if (window.history && window.history.replaceState) {
+        const url = new URL(window.location.href);
+        url.searchParams.set('role', 'host');
+        window.history.replaceState({}, '', url.toString());
+      }
+    } else {
+      secHost.style.display = 'none';
+      secTeam.style.display = 'block';
+
+      tabTeam.classList.add('active', 'team-active');
+      tabHost.classList.remove('active', 'host-active');
+
+      tabTeam.setAttribute('aria-selected', 'true');
+      tabHost.setAttribute('aria-selected', 'false');
+
+      card.classList.remove('host-mode');
+      card.classList.add('team-mode');
+
+      const teamInput = document.getElementById('team_code');
+      if (teamInput) teamInput.focus();
+
+      if (window.history && window.history.replaceState) {
+        const url = new URL(window.location.href);
+        url.searchParams.set('role', 'team');
+        window.history.replaceState({}, '', url.toString());
+      }
+    }
+  }
+
+  // Handle URL hash or query param on initial load
+  (function initRoleState() {
+    const params = new URLSearchParams(window.location.search);
+    const roleParam = params.get('role');
+    const hash = window.location.hash;
+
+    if (roleParam === 'host' || hash === '#host' || hash === '#admin') {
+      switchRole('host');
+    } else if (roleParam === 'team' || hash === '#team') {
+      switchRole('team');
+    }
+  })();
+</script>
+{% endblock %}

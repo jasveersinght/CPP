@@ -28,8 +28,13 @@
     <button id="btn-enter-fullscreen" class="btn btn-primary" style="
         width: 100%; padding: 0.9rem 1.5rem;
         font-size: 1.1rem; font-weight: 800;
-        letter-spacing: 0.05em; border-radius: 10px;">
+        letter-spacing: 0.05em; border-radius: 10px; margin-bottom: 0.75rem;">
       ⛶ ENTER FULLSCREEN &amp; START
+    </button>
+    <button type="button" id="btn-skip-fullscreen" class="btn btn-secondary" style="
+        width: 100%; padding: 0.5rem 1rem;
+        font-size: 0.85rem; border-radius: 8px; opacity: 0.85;">
+      Skip to Dashboard (Tab Switching Still Monitored)
     </button>
     <div id="fullscreen-error" style="
         display: none; margin-top: 1rem;
@@ -124,13 +129,19 @@
       <img id="auction-question-image" src="{{ active_auction.question_image if active_auction and active_auction.question_image else '' }}" alt="Question Diagram" style="max-height: 300px; max-width: 100%; border-radius: 8px; border: 1px solid var(--border-color); object-fit: contain;">
     </div>
 
-    <!-- Real-time 10-Second Countdown Timer -->
+    <!-- Phase Indicator Banner (Reading 10s vs Bidding 30s) -->
+    <div id="auction-phase-banner" class="phase-banner-reading" style="display: none; margin: 0.75rem auto 1rem; max-width: 500px; padding: 0.6rem 1.25rem; border-radius: 8px; font-weight: 800; font-size: 1rem; text-align: center; letter-spacing: 0.04em;">
+      <span id="auction-phase-icon">📖</span>
+      <span id="auction-phase-text">QUESTION READING TIME</span>
+    </div>
+
+    <!-- Real-time Countdown Timer (Reading 10s / Bidding 30s) -->
     <div class="timer-container">
       <div id="auction-timer-box" class="timer-box">
         <div id="auction-timer-digits" class="timer-digits">
-          {{ active_auction.time_remaining|int if active_auction else 10 }}
+          {{ active_auction.time_remaining|int if active_auction else 30 }}
         </div>
-        <div class="timer-label">Seconds</div>
+        <div id="auction-timer-label" class="timer-label">Seconds</div>
       </div>
     </div>
 
@@ -163,7 +174,13 @@
       <div id="leader-notice" style="display: none; margin-bottom: 0.75rem; color: #34d399; font-weight: 700; font-size: 1.05rem;">
         🌟 Your team currently leads this auction!
       </div>
-      <button id="btn-place-bid" class="btn btn-gold btn-bid-action">
+
+      <!-- Reading Notice Placeholder (Shown during first 10s while bid button is hidden) -->
+      <div id="bid-reading-notice" style="display: none; margin: 0 auto 0.75rem; max-width: 440px; padding: 0.75rem 1.25rem; border-radius: 8px; background: rgba(56, 189, 248, 0.12); border: 1px solid rgba(56, 189, 248, 0.4); color: var(--accent-cyan); font-weight: 700; font-size: 1rem;">
+        <span>📖 Question Reading Time — Bid button will be visible in <strong id="bid-unlock-countdown">10</strong>s</span>
+      </div>
+
+      <button id="btn-place-bid" class="btn btn-gold btn-bid-action" style="display: none;">
         BID ₹<span id="btn-bid-amount">500.00</span>
       </button>
       <div id="bid-warning-msg" style="color: var(--accent-red); font-size: 0.9rem; margin-top: 0.5rem; font-weight: 600;"></div>
@@ -325,5 +342,5 @@
   window.IS_DISQUALIFIED = {{ 'true' if team.is_disqualified else 'false' }};
   window.VIOLATION_COUNT = {{ team.violation_count }};
 </script>
-<script src="{{ url_for('static', filename='js/team_dashboard.js') }}"></script>
+<script src="{{ url_for('static', filename='js/team_dashboard.js') ~ '?v=3.2' }}"></script>
 {% endblock %}

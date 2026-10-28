@@ -102,20 +102,18 @@
     }
     .proj-stat-box.highlight {
       border-color: var(--accent-gold);
-      background: rgba(245, 158, 11, 0.1);
+      background: rgba(245, 158, 11, 0.08);
     }
     .proj-stat-num {
-      font-size: 2.8rem;
+      font-size: 2.5rem;
       font-weight: 900;
-      color: #fff;
+      margin-bottom: 0.5rem;
     }
     .proj-stat-lbl {
       font-size: 1rem;
       color: var(--text-muted);
       text-transform: uppercase;
-      font-weight: 700;
       letter-spacing: 1px;
-      margin-top: 0.5rem;
     }
     .winner-overlay {
       position: absolute;
@@ -192,12 +190,18 @@
           <img id="proj-question-image" src="{{ active_auction.question_image if active_auction and active_auction.question_image else '' }}" alt="Question Illustration" style="max-height: 420px; max-width: 100%; border-radius: 16px; border: 2px solid var(--border-color); object-fit: contain; box-shadow: 0 10px 30px rgba(0,0,0,0.6);">
         </div>
 
+        <!-- Phase Banner (Reading 10s vs Bidding 30s) -->
+        <div id="proj-phase-banner" class="phase-banner-reading" style="display: none; margin: 1rem auto 1.5rem; max-width: 600px; padding: 0.75rem 1.5rem; border-radius: 12px; font-weight: 900; font-size: 1.4rem; text-align: center; letter-spacing: 0.05em;">
+          <span id="proj-phase-icon">📖</span>
+          <span id="proj-phase-text">QUESTION READING TIME</span>
+        </div>
+
         <!-- Giant Timer -->
         <div class="proj-timer-circle" id="proj-timer-box">
           <div class="proj-timer-num" id="proj-timer-digits">
-            {{ active_auction.time_remaining|int if active_auction else 10 }}
+            {{ active_auction.time_remaining|int if active_auction else 30 }}
           </div>
-          <div style="font-size: 1rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 2px;">Seconds</div>
+          <div id="proj-timer-label" style="font-size: 1rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 2px;">Seconds</div>
         </div>
 
         <!-- Four Large Metric Cards -->
@@ -218,21 +222,17 @@
 
           <div class="proj-stat-box" style="grid-column: span 2; border-color: var(--accent-cyan); background: rgba(6, 182, 212, 0.08);">
             <div class="proj-stat-num" id="proj-leader-team" style="color: #22d3ee; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
-              {{ active_auction.current_bidder_code if active_auction and active_auction.current_bidder_code else 'Waiting For Bids' }}
+              {{ active_auction.current_bidder_code if active_auction and active_auction.current_bidder_code else 'Waiting For Opening Bid' }}
             </div>
-            <div class="proj-stat-lbl">Current Highest Bidder</div>
+            <div class="proj-stat-lbl">Current Leader</div>
           </div>
         </div>
       </div>
     </div>
   </main>
 
-  <footer style="text-align: center; color: var(--text-muted); font-size: 0.95rem; border-top: 1px solid var(--border-color); padding-top: 1.5rem;">
-    MATH AUCTION LIVE PROJECTION SYSTEM &bull; AUTHORITATIVE SERVER CLOCK SYNCHRONIZED
-  </footer>
-
   <script src="{{ url_for('static', filename='js/socket.io.min.js') }}"></script>
-  <script src="{{ url_for('static', filename='js/sound.js') }}"></script>
-  <script src="{{ url_for('static', filename='js/live_auction.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/sound.js') ~ '?v=3.2' }}"></script>
+  <script src="{{ url_for('static', filename='js/live_auction.js') ~ '?v=3.2' }}"></script>
 </body>
 </html>

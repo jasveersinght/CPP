@@ -12,13 +12,14 @@ class AuctionService:
     def get_active_auction():
         """
         Fetches the currently active (LIVE) auction if any.
-        Computes remaining time based on server database time.
+        Computes remaining reading and bidding time based on server database time.
         Does NOT expose the correct answer!
         """
         sql = """
             SELECT a.id, a.question_id, a.starting_bid, a.current_bid,
                    a.current_bidder_id, a.status,
-                   a.started_at, a.ends_at,
+                   a.started_at, a.bidding_starts_at, a.ends_at,
+                   IFNULL(TIMESTAMPDIFF(MICROSECOND, NOW(6), a.bidding_starts_at) / 1000000.0, 0.0) as reading_time_remaining,
                    TIMESTAMPDIFF(MICROSECOND, NOW(6), a.ends_at) / 1000000.0 as time_remaining,
                    q.category, q.question_text, q.question_image, q.question_type,
                    q.options, q.reward,
@@ -34,14 +35,24 @@ class AuctionService:
         if not row:
             return None
 
-        # Convert Decimal values for JSON serialization
-        time_rem = float(row['time_remaining']) if row['time_remaining'] is not None else 0.0
+        cfg = get_config()
+        reading_rem = float(row['reading_time_remaining']) if row.get('reading_time_remaining') is not None else 0.0
+        time_rem = float(row['time_remaining']) if row.get('time_remaining') is not None else 0.0
+
+        is_reading = (reading_rem > 0.0)
+        row['phase'] = 'READING' if is_reading else 'BIDDING'
+        row['reading_time_remaining'] = max(0.0, round(reading_rem, 2))
         row['time_remaining'] = max(0.0, round(time_rem, 2))
+        row['reading_duration'] = getattr(cfg, 'QUESTION_READING_DURATION_SECONDS', 10)
+        row['bidding_duration'] = getattr(cfg, 'AUCTION_DURATION_SECONDS', 30)
+
+        # Convert Decimal values for JSON serialization
         row['starting_bid'] = float(row['starting_bid'])
         row['current_bid'] = float(row['current_bid'])
         row['reward'] = float(row['reward'])
-        row['ends_at_iso'] = row['ends_at'].isoformat() if row['ends_at'] else None
-        row['started_at_iso'] = row['started_at'].isoformat() if row['started_at'] else None
+        row['started_at_iso'] = row['started_at'].isoformat() if row.get('started_at') else None
+        row['bidding_starts_at_iso'] = row['bidding_starts_at'].isoformat() if row.get('bidding_starts_at') else None
+        row['ends_at_iso'] = row['ends_at'].isoformat() if row.get('ends_at') else None
         return row
 
     @staticmethod
@@ -59,14 +70,21 @@ class AuctionService:
         return fetch_one(sql, (auction_id,))
 
     @staticmethod
-    def start_auction(question_id, socketio=None):
+    def start_auction(question_id, socketio=None, reading_duration=None, bidding_duration=None):
         """
         Host starts an auction for a specified question.
         Ensures only ONE live auction exists.
-        Initializes auction with starting bid and 10s countdown.
+        Initializes auction with:
+        - 10s Question Reading Time (bidding locked)
+        - 30s Bid Time (bidding open, resets on valid bid)
         """
         cfg = get_config()
-        duration_sec = cfg.AUCTION_DURATION_SECONDS
+        if reading_duration is None:
+            reading_duration = getattr(cfg, 'QUESTION_READING_DURATION_SECONDS', 10)
+        if bidding_duration is None:
+            bidding_duration = getattr(cfg, 'AUCTION_DURATION_SECONDS', 30)
+
+        total_duration = reading_duration + bidding_duration
 
         with db_transaction() as (conn, cursor):
             # 1. Enforce single LIVE auction constraint
@@ -88,13 +106,16 @@ class AuctionService:
 
             starting_bid = question['starting_bid']
 
-            # 4. Insert new Auction row
+            # 4. Insert new Auction row with reading phase and bidding phase
             cursor.execute(
                 """
-                INSERT INTO auctions (question_id, starting_bid, current_bid, current_bidder_id, status, started_at, ends_at)
-                VALUES (%s, %s, %s, NULL, 'LIVE', NOW(6), DATE_ADD(NOW(6), INTERVAL %s SECOND))
+                INSERT INTO auctions (
+                    question_id, starting_bid, current_bid, current_bidder_id, status,
+                    started_at, bidding_starts_at, ends_at
+                )
+                VALUES (%s, %s, %s, NULL, 'LIVE', NOW(6), DATE_ADD(NOW(6), INTERVAL %s SECOND), DATE_ADD(NOW(6), INTERVAL %s SECOND))
                 """,
-                (question_id, starting_bid, starting_bid, duration_sec)
+                (question_id, starting_bid, starting_bid, reading_duration, total_duration)
             )
             auction_id = cursor.lastrowid
 
@@ -102,8 +123,10 @@ class AuctionService:
             cursor.execute(
                 """
                 SELECT a.id, a.question_id, a.starting_bid, a.current_bid, a.status,
-                       a.ends_at, TIMESTAMPDIFF(MICROSECOND, NOW(6), a.ends_at) / 1000000.0 as time_remaining,
-                       q.category, q.question_text, q.question_type, q.reward, q.options
+                       a.started_at, a.bidding_starts_at, a.ends_at,
+                       IFNULL(TIMESTAMPDIFF(MICROSECOND, NOW(6), a.bidding_starts_at) / 1000000.0, 0.0) as reading_time_remaining,
+                       TIMESTAMPDIFF(MICROSECOND, NOW(6), a.ends_at) / 1000000.0 as time_remaining,
+                       q.category, q.question_text, q.question_image, q.question_type, q.reward, q.options
                 FROM auctions a
                 JOIN questions q ON a.question_id = q.id
                 WHERE a.id = %s
@@ -112,7 +135,14 @@ class AuctionService:
             )
             auction_data = cursor.fetchone()
 
-        logger.info(f"AUCTION STARTED: Auction #{auction_id} for Question #{question_id}. Starting bid: INR {starting_bid:.2f}")
+        reading_rem = float(auction_data['reading_time_remaining']) if auction_data.get('reading_time_remaining') is not None else 0.0
+        time_rem = float(auction_data['time_remaining']) if auction_data.get('time_remaining') is not None else 0.0
+        phase = 'READING' if reading_rem > 0 else 'BIDDING'
+
+        logger.info(
+            f"AUCTION STARTED: Auction #{auction_id} for Question #{question_id}. "
+            f"Reading phase: {reading_duration}s, Bidding phase: {bidding_duration}s. Starting bid: INR {starting_bid:.2f}"
+        )
 
         # Broadcast real-time event via Socket.IO
         if socketio:
@@ -121,13 +151,20 @@ class AuctionService:
                 'question_id': question_id,
                 'category': auction_data['category'],
                 'question_text': auction_data['question_text'],
+                'question_image': auction_data['question_image'],
                 'question_type': auction_data['question_type'],
                 'starting_bid': float(auction_data['starting_bid']),
                 'current_bid': float(auction_data['current_bid']),
                 'next_bid': float(auction_data['starting_bid']),
                 'reward': float(auction_data['reward']),
-                'time_remaining': max(0.0, round(float(auction_data['time_remaining']), 2)),
-                'ends_at_iso': auction_data['ends_at'].isoformat() if auction_data['ends_at'] else None,
+                'phase': phase,
+                'reading_duration': reading_duration,
+                'bidding_duration': bidding_duration,
+                'reading_time_remaining': max(0.0, round(reading_rem, 2)),
+                'time_remaining': max(0.0, round(time_rem, 2)),
+                'started_at_iso': auction_data['started_at'].isoformat() if auction_data.get('started_at') else None,
+                'bidding_starts_at_iso': auction_data['bidding_starts_at'].isoformat() if auction_data.get('bidding_starts_at') else None,
+                'ends_at_iso': auction_data['ends_at'].isoformat() if auction_data.get('ends_at') else None,
                 'current_bidder': None
             }
             socketio.emit('auction_started', payload)
@@ -141,12 +178,13 @@ class AuctionService:
         Server-authoritative validation:
         1. Locks auction row.
         2. Validates auction status == 'LIVE'.
-        3. Verifies server/database time has not passed ends_at.
-        4. Validates team eligibility, limits (5 question limit), and balance.
-        5. Calculates server-determined next bid (starting bid for first, +₹10 for subsequent).
-        6. Records bid in bids table.
-        7. Resets ends_at to NOW(6) + 10s.
-        8. Commits transaction and broadcasts bid_update.
+        3. Enforces 10s Question Reading Time (bids rejected while reading is active).
+        4. Verifies server/database time has not passed ends_at.
+        5. Validates team eligibility, limits (5 question limit), and balance.
+        6. Calculates server-determined next bid (starting bid for first, +₹10 for subsequent).
+        7. Records bid in bids table.
+        8. Resets ends_at to NOW(6) + 30s bid time.
+        9. Commits transaction and broadcasts bid_update.
         """
         cfg = get_config()
         duration_sec = cfg.AUCTION_DURATION_SECONDS
@@ -162,9 +200,14 @@ class AuctionService:
             if auction['status'] != 'LIVE':
                 raise ValueError(f"Auction #{auction_id} is not LIVE (status: {auction['status']}).")
 
-            # 2. Check server/database time vs ends_at
+            # 2. Check reading phase and server/database time vs ends_at
             cursor.execute("SELECT NOW(6) as now_time")
             now_time = cursor.fetchone()['now_time']
+
+            # Enforce 10s Question Reading Time
+            if auction.get('bidding_starts_at') and now_time < auction['bidding_starts_at']:
+                seconds_left = max(1, int(round((auction['bidding_starts_at'] - now_time).total_seconds())))
+                raise ValueError(f"Question reading time in progress! Bidding opens in {seconds_left}s.")
 
             if auction['ends_at'] and now_time >= auction['ends_at']:
                 # Auction expired! Trigger atomic close within this transaction context
@@ -215,7 +258,7 @@ class AuctionService:
                 (auction_id, team_id, next_bid)
             )
 
-            # 6. Update Auction: update bid, current bidder, and reset ends_at to NOW(6) + 10s
+            # 6. Update Auction: update bid, current bidder, and reset ends_at to NOW(6) + 30s bid time
             cursor.execute(
                 """
                 UPDATE auctions
@@ -252,6 +295,8 @@ class AuctionService:
                 'current_bidder_id': team['id'],
                 'current_bidder_code': team['team_code'],
                 'current_bidder_name': team['team_name'],
+                'phase': 'BIDDING',
+                'bidding_duration': duration_sec,
                 'ends_at_iso': updated['ends_at'].isoformat() if updated['ends_at'] else None,
                 'time_remaining': max(0.0, round(float(updated['time_remaining']), 2))
             }

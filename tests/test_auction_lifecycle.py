@@ -21,12 +21,12 @@ class TestAuctionLifecycle(unittest.TestCase):
         q1 = fetch_one("SELECT id FROM questions WHERE id = 1")
         q2 = fetch_one("SELECT id FROM questions WHERE id = 2")
 
-        auction_id = AuctionService.start_auction(q1['id'])
+        auction_id = AuctionService.start_auction(q1['id'], reading_duration=0)
         self.assertIsNotNone(auction_id)
 
         # Attempting to start another live auction must fail
         with self.assertRaises(ValueError):
-            AuctionService.start_auction(q2['id'])
+            AuctionService.start_auction(q2['id'], reading_duration=0)
 
     def test_02_section38_exact_auction_test(self):
         """
@@ -46,7 +46,7 @@ class TestAuctionLifecycle(unittest.TestCase):
         """
         # Step 1: Start auction
         q1 = fetch_one("SELECT id, starting_bid FROM questions WHERE id = 1")
-        a1_id = AuctionService.start_auction(q1['id'])
+        a1_id = AuctionService.start_auction(q1['id'], reading_duration=0)
 
         # Fast-forward / simulate time expiry for a1
         execute_query("UPDATE auctions SET ends_at = DATE_SUB(NOW(6), INTERVAL 1 SECOND) WHERE id = %s", (a1_id,))
@@ -59,9 +59,9 @@ class TestAuctionLifecycle(unittest.TestCase):
         q1_db = fetch_one("SELECT * FROM questions WHERE id = %s", (q1['id'],))
         self.assertEqual(q1_db['status'], 'AVAILABLE')
 
-        # Step 4: Start another auction
+        # Step 4: Start another auction (reading_duration=0 to test direct bidding)
         q2 = fetch_one("SELECT id, starting_bid FROM questions WHERE id = 2")
-        a2_id = AuctionService.start_auction(q2['id'])
+        a2_id = AuctionService.start_auction(q2['id'], reading_duration=0)
 
         team_a = fetch_one("SELECT id, team_code, current_balance FROM teams WHERE team_code = 'TEAM001'")
         team_b = fetch_one("SELECT id, team_code, current_balance FROM teams WHERE team_code = 'TEAM002'")
@@ -87,9 +87,9 @@ class TestAuctionLifecycle(unittest.TestCase):
         with self.assertRaises(ValueError):
             AuctionService.place_bid(a2_id, team_b['id'])
 
-        # Step 7 & 8: Simulate 10s expiry without more bids
+        # Step 7 & 8: Simulate expiry without more bids
         execute_query("UPDATE auctions SET ends_at = DATE_SUB(NOW(6), INTERVAL 1 SECOND) WHERE id = %s", (a2_id,))
-        ReconciliationService.reconcile_expired_auctions(force=True)  # force=True bypasses 250ms throttle
+        ReconciliationService.reconcile_expired_auctions(force=True)
 
         # Step 9: Verify winner = Team B
         a2_final = fetch_one("SELECT * FROM auctions WHERE id = %s", (a2_id,))
@@ -101,7 +101,7 @@ class TestAuctionLifecycle(unittest.TestCase):
         expected_balance = Decimal(str(team_b['current_balance'])) - Decimal(str(expected_bid_b))
         self.assertEqual(Decimal(str(team_b_updated['current_balance'])), expected_balance)
         self.assertEqual(team_b_updated['questions_won'], 1)
-        self.assertEqual(team_b_updated['status'], 'WAITING')  # WAITING = won < 5, continues bidding
+        self.assertEqual(team_b_updated['status'], 'WAITING')
 
         # Step 11: Transaction created
         txs = fetch_all("SELECT * FROM transactions WHERE team_id = %s AND auction_id = %s", (team_b['id'], a2_id))

@@ -30,7 +30,7 @@ class TestRestartRecovery(unittest.TestCase):
         9. Run reconciliation again to verify idempotence: NO duplicate transaction, NO duplicate deduction!
         """
         q = fetch_one("SELECT id, starting_bid FROM questions WHERE id = 1")
-        auction_id = AuctionService.start_auction(q['id'])
+        auction_id = AuctionService.start_auction(q['id'], reading_duration=0)
 
         team = fetch_one("SELECT id, team_code, current_balance FROM teams WHERE team_code = 'TEAM003'")
         bid_amount = AuctionService.place_bid(auction_id, team['id'])

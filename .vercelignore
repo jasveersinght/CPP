@@ -1,0 +1,10 @@
+.git
+.gitignore
+.env
+__pycache__
+*/__pycache__
+*/*/__pycache__
+tests/
+*.pyc
+.pytest_cache
+check_host.py

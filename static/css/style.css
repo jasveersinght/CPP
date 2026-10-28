@@ -538,3 +538,98 @@ a:hover {
   .bid-stats-grid { grid-template-columns: 1fr; }
   .projector-title { font-size: 2.2rem; }
 }
+
+
+/* Reading phase and bidding phase enhancements */
+.timer-box.reading-phase {
+  border-color: var(--accent-cyan);
+  box-shadow: 0 0 25px rgba(6, 182, 212, 0.4);
+}
+.timer-box.reading-phase .timer-digits {
+  color: var(--accent-cyan);
+}
+.phase-banner-reading {
+  background: rgba(6, 182, 212, 0.15);
+  border: 1px solid var(--accent-cyan);
+  color: var(--accent-cyan);
+  animation: pulse 2s infinite ease-in-out;
+}
+.phase-banner-bidding {
+  background: rgba(245, 158, 11, 0.15);
+  border: 1px solid var(--accent-gold);
+  color: #fbbf24;
+}
+.proj-timer-circle.reading-phase {
+  border-color: var(--accent-cyan) !important;
+  box-shadow: 0 0 60px rgba(6, 182, 212, 0.5) !important;
+}
+.proj-timer-circle.reading-phase .proj-timer-num {
+  color: var(--accent-cyan) !important;
+}
+
+/* ============================================================
+   Unified Login Portal & Role Switcher
+   ============================================================ */
+.login-tabs {
+  display: flex;
+  background: var(--bg-secondary);
+  border-radius: 10px;
+  padding: 4px;
+  margin-bottom: 1.5rem;
+  border: 1px solid var(--border-color);
+  gap: 4px;
+}
+
+.login-tab-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.65rem 1rem;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  color: var(--text-secondary);
+  font-weight: 600;
+  font-size: 0.95rem;
+  cursor: pointer;
+  transition: all 0.25s ease;
+}
+
+.login-tab-btn:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.login-tab-btn.active.team-active {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.22), rgba(217, 119, 6, 0.32));
+  color: #fbbf24;
+  border-color: var(--accent-gold);
+  box-shadow: 0 0 12px var(--glow-gold);
+}
+
+.login-tab-btn.active.host-active {
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.22), rgba(37, 99, 235, 0.32));
+  color: #60a5fa;
+  border-color: var(--accent-blue);
+  box-shadow: 0 0 12px var(--glow-blue);
+}
+
+.login-card {
+  max-width: 480px;
+  margin: 2.5rem auto;
+  border: 2px solid var(--border-color);
+  padding: 2.25rem 2rem;
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+.login-card.team-mode {
+  border-color: var(--accent-gold);
+  box-shadow: 0 6px 28px rgba(245, 158, 11, 0.15);
+}
+
+.login-card.host-mode {
+  border-color: var(--accent-blue);
+  box-shadow: 0 6px 28px rgba(59, 130, 246, 0.15);
+}

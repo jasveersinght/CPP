@@ -122,30 +122,53 @@ document.addEventListener('DOMContentLoaded', () => {
     refreshTeamsData();
   });
 
-  // Timer logic
-  function startTimer(endsAtIso, initialSeconds) {
+  // Timer logic - Total 40s Countdown (10s Reading -> 30s Bidding)
+  function startTimer(endsAtIso, initialSeconds, biddingStartsAtIso) {
     if (timerInterval) clearInterval(timerInterval);
-    const endsAt = endsAtIso ? new Date(endsAtIso).getTime() : Date.now() + (initialSeconds * 1000);
+    const biddingStartsAt = biddingStartsAtIso ? new Date(biddingStartsAtIso).getTime() : null;
+    const endsAt = endsAtIso ? new Date(endsAtIso).getTime() : Date.now() + ((initialSeconds || 40) * 1000);
 
     function tick() {
       const now = Date.now();
       const diffMs = endsAt - now;
-      const secondsLeft = Math.max(0, Math.ceil(diffMs / 1000));
+      const totalSecLeft = Math.max(0, Math.ceil(diffMs / 1000));
 
       if (hostTimerDigits) {
-        hostTimerDigits.textContent = secondsLeft;
+        hostTimerDigits.textContent = totalSecLeft;
       }
 
-      if (secondsLeft <= 3 && secondsLeft > 0) {
+      if (biddingStartsAt && now < biddingStartsAt) {
+        const readingLeft = Math.max(0, Math.ceil((biddingStartsAt - now) / 1000));
+        if (hostTimerBox) {
+          hostTimerBox.classList.remove('warning');
+          hostTimerBox.classList.add('reading-phase');
+        }
+        if (hostAuctionStatusBadge) {
+          hostAuctionStatusBadge.textContent = '📖 READING (Bids open in ' + readingLeft + 's)';
+          hostAuctionStatusBadge.style.background = 'var(--accent-cyan)';
+        }
+        return;
+      }
+
+      if (hostTimerBox) {
+        hostTimerBox.classList.remove('reading-phase');
+      }
+
+      if (totalSecLeft <= 5 && totalSecLeft > 0) {
         hostTimerBox.classList.add('warning');
       } else {
         hostTimerBox.classList.remove('warning');
       }
 
-      if (secondsLeft <= 0) {
+      if (hostAuctionStatusBadge) {
+        hostAuctionStatusBadge.textContent = '🔥 LIVE / BIDDING';
+        hostAuctionStatusBadge.style.background = 'var(--accent-green)';
+      }
+
+      if (totalSecLeft <= 0) {
         clearInterval(timerInterval);
         if (hostTimerDigits) hostTimerDigits.textContent = '0';
-        hostTimerBox.classList.remove('warning');
+        if (hostTimerBox) hostTimerBox.classList.remove('warning');
       }
     }
 
@@ -192,7 +215,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (hostActiveAuctionId) hostActiveAuctionId.value = data.id ?? data.auction_id;
 
-    startTimer(data.ends_at_iso, data.time_remaining || 10);
+    startTimer(data.ends_at_iso, data.time_remaining || 40, data.bidding_starts_at_iso);
     disableStartButtons(true);
   }
 
@@ -226,7 +249,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (statCurrentBidder) statCurrentBidder.textContent = data.current_bidder_code;
 
     appendBidRow(data);
-    startTimer(data.ends_at_iso, data.time_remaining || 10);
+    startTimer(data.ends_at_iso, data.time_remaining || 40, data.bidding_starts_at_iso);
   }
 
   function handleAuctionEnded(data) {
@@ -473,31 +496,37 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // Button actions: Start Auction
-  document.querySelectorAll('.btn-start-auction').forEach(btn => {
-    btn.addEventListener('click', async () => {
-      const qId = btn.getAttribute('data-question-id');
-      if (!qId) return;
+  // Button actions: Start Auction (Delegated event listener)
+  document.addEventListener('click', async (e) => {
+    const btn = e.target.closest('.btn-start-auction');
+    if (!btn) return;
+    const qId = btn.getAttribute('data-question-id');
+    if (!qId) return;
 
-      btn.disabled = true;
-      try {
-        const resp = await fetch('/api/host/start-auction', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ question_id: qId })
-        });
-        const res = await resp.json();
-        if (res.success) {
-          showToast(res.message, 'success');
-        } else {
-          showToast(`Error: ${res.error}`, 'danger');
-          btn.disabled = false;
-        }
-      } catch (err) {
-        showToast('Network error starting auction.', 'danger');
+    btn.disabled = true;
+    const originalText = btn.innerHTML;
+    btn.innerHTML = '⏳ Launching...';
+
+    try {
+      const resp = await fetch('/api/host/start-auction', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question_id: qId })
+      });
+      const res = await resp.json();
+      if (res.success) {
+        showToast(res.message, 'success');
+      } else {
+        showToast(`Error: ${res.error}`, 'danger');
         btn.disabled = false;
+        btn.innerHTML = originalText;
       }
-    });
+    } catch (err) {
+      console.error('Network error starting auction:', err);
+      showToast('Network error starting auction.', 'danger');
+      btn.disabled = false;
+      btn.innerHTML = originalText;
+    }
   });
 
   // Cancel Auction

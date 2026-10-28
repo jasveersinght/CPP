@@ -13,10 +13,10 @@ from routes.team import team_bp
 from routes.host import host_bp
 from sockets.auction_events import register_socket_handlers
 from services.reconciliation_service import AuctionWatchdog, ReconciliationService
+from database.db import ensure_schema_compatibility
 
 # Configure logging
 logging.basicConfig(
-    
     level=logging.INFO,
     format='%(asctime)s [%(levelname)s] %(name)s: %(message)s',
     handlers=[
@@ -27,7 +27,12 @@ logger = logging.getLogger('math_auction')
 
 def create_app(config_class=None):
     """Application factory for MATH AUCTION."""
-    app = Flask(__name__)
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    app = Flask(
+        __name__,
+        template_folder=os.path.join(base_dir, 'templates'),
+        static_folder=os.path.join(base_dir, 'static')
+    )
     
     if config_class is None:
         app.config.from_object(get_config())
@@ -65,6 +70,9 @@ def create_app(config_class=None):
     # Startup reconciliation & Watchdog launch
     with app.app_context():
         try:
+            # Ensure database schema has newly added columns
+            ensure_schema_compatibility()
+
             logger.info("Running startup reconciliation for expired auctions...")
             ReconciliationService.reconcile_expired_auctions(socketio=socketio)
             

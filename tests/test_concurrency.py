@@ -55,7 +55,7 @@ class TestConcurrency(unittest.TestCase):
         self.assertEqual(len(teams), 100)
 
         q = fetch_one("SELECT id, starting_bid FROM questions WHERE id = 1")
-        auction_id = AuctionService.start_auction(q['id'])
+        auction_id = AuctionService.start_auction(q['id'], reading_duration=0)
 
         successful_bids = []
         rejected_bids = []

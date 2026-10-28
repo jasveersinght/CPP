@@ -7,6 +7,7 @@ logger = logging.getLogger(__name__)
 
 class ReconciliationService:
     _last_run = 0.0
+    _last_error_log = 0.0
     _run_lock = threading.Lock()
 
     @staticmethod
@@ -50,7 +51,10 @@ class ReconciliationService:
             err_str = str(e)
             if "doesn't exist" in err_str or "1146" in err_str:
                 return []
-            logger.error(f"Error during watchdog reconciliation scan: {e}", exc_info=True)
+            now_err = time.time()
+            if now_err - ReconciliationService._last_error_log > 30.0:
+                ReconciliationService._last_error_log = now_err
+                logger.error(f"Error during watchdog reconciliation scan: {e}")
 
         return expired_auctions
 

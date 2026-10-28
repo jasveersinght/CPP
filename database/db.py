@@ -28,16 +28,20 @@ class ConnectionPool:
 
     def _create_new_raw_connection(self):
         cfg = get_config().get_db_config()
-        conn = pymysql.connect(
-            host=cfg['host'],
-            port=cfg['port'],
-            user=cfg['user'],
-            password=cfg['password'],
-            database=cfg['database'],
-            charset=cfg['charset'],
-            autocommit=cfg['autocommit'],
-            cursorclass=pymysql.cursors.DictCursor
-        )
+        conn_kwargs = {
+            'host': cfg['host'],
+            'port': cfg['port'],
+            'user': cfg['user'],
+            'password': cfg['password'],
+            'database': cfg['database'],
+            'charset': cfg['charset'],
+            'autocommit': cfg['autocommit'],
+            'cursorclass': pymysql.cursors.DictCursor,
+            'connect_timeout': 10
+        }
+        if cfg.get('ssl'):
+            conn_kwargs['ssl'] = cfg['ssl']
+        conn = pymysql.connect(**conn_kwargs)
         return conn
 
     def get_connection(self, timeout=10.0):
@@ -162,3 +166,16 @@ def fetch_all(sql, params=None):
     with get_db_cursor() as cursor:
         cursor.execute(sql, params or ())
         return cursor.fetchall()
+
+def ensure_schema_compatibility():
+    """Ensures newly added columns exist without breaking existing database state."""
+    try:
+        with get_db_cursor() as cursor:
+            cursor.execute("SHOW TABLES LIKE 'auctions'")
+            if cursor.fetchone():
+                cursor.execute("SHOW COLUMNS FROM auctions LIKE 'bidding_starts_at'")
+                if not cursor.fetchone():
+                    logger.info("Auto-migrating schema: adding bidding_starts_at column to auctions table...")
+                    cursor.execute("ALTER TABLE auctions ADD COLUMN bidding_starts_at DATETIME(6) DEFAULT NULL AFTER started_at")
+    except Exception as e:
+        logger.warning(f"Schema compatibility check notice: {e}")
