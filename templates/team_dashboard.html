@@ -1,0 +1,329 @@
+{% extends 'base.html' %}
+{% block title %}Team Dashboard | MATH AUCTION{% endblock %}
+
+{% block content %}
+<!-- ================================================================== -->
+<!-- FULLSCREEN ENTRY OVERLAY                                             -->
+<!-- Shown on first load. Fullscreen API REQUIRES a direct user gesture. -->
+<!-- ================================================================== -->
+<div id="fullscreen-overlay" style="
+    position: fixed; inset: 0; z-index: 99999;
+    background: rgba(5, 10, 20, 0.97);
+    backdrop-filter: blur(12px);
+    display: {% if team.is_disqualified %}none{% else %}flex{% endif %}; align-items: center; justify-content: center;
+    flex-direction: column; text-align: center; padding: 2rem;">
+  <div style="max-width: 480px; width: 100%;">
+    <div style="font-size: 3.5rem; margin-bottom: 1rem;">🖥️</div>
+    <h2 style="color: #60a5fa; font-size: 1.6rem; font-weight: 800; margin-bottom: 0.75rem; letter-spacing: 0.03em;">
+      CRYTEX — FULLSCREEN REQUIRED
+    </h2>
+    <p style="color: #94a3b8; font-size: 1rem; margin-bottom: 0.5rem; line-height: 1.6;">
+      Competition rules require fullscreen mode throughout the event.<br>
+      Leaving fullscreen will be recorded as a violation.
+    </p>
+    <p style="color: #64748b; font-size: 0.85rem; margin-bottom: 1.75rem;">
+      Team: <strong style="color: #e2e8f0;">{{ team.team_code }}</strong> &nbsp;|&nbsp;
+      Balance: <strong style="color: #34d399;">₹{{ "%.2f"|format(team.current_balance) }}</strong>
+    </p>
+    <button id="btn-enter-fullscreen" class="btn btn-primary" style="
+        width: 100%; padding: 0.9rem 1.5rem;
+        font-size: 1.1rem; font-weight: 800;
+        letter-spacing: 0.05em; border-radius: 10px;">
+      ⛶ ENTER FULLSCREEN &amp; START
+    </button>
+    <div id="fullscreen-error" style="
+        display: none; margin-top: 1rem;
+        color: #f87171; font-size: 0.9rem; font-weight: 600;
+        padding: 0.6rem 1rem; border-radius: 6px;
+        background: rgba(239,68,68,0.12); border: 1px solid rgba(239,68,68,0.3);">
+    </div>
+  </div>
+</div>
+
+{% if team.is_disqualified %}
+<div id="disqualified-banner" style="
+    position: fixed; top: 0; left: 0; right: 0; z-index: 99998;
+    background: linear-gradient(135deg, rgba(185,28,28,0.97), rgba(127,29,29,0.97));
+    border-bottom: 3px solid #f87171;
+    color: #fff; text-align: center;
+    padding: 1.2rem 1.5rem;
+    font-size: 1.1rem; font-weight: 800;
+    letter-spacing: 0.04em;
+    backdrop-filter: blur(6px);">
+  🚫 TEAM DISQUALIFIED — 3 STRIKES REACHED
+  <div style="font-size: 0.85rem; font-weight: 400; margin-top: 0.25rem; color: #fca5a5;">
+    Your team has been removed from the competition due to 3 integrity violations.
+    All records and balances are preserved.
+  </div>
+</div>
+{% endif %}
+
+<!-- TOP STATS BAR -->
+<div class="stats-grid">
+  <div class="stat-card">
+    <div id="stat-balance" class="stat-val" style="color: #34d399;">
+      ₹{{ "%.2f"|format(team.current_balance) }}
+    </div>
+    <div class="stat-label">Virtual Wallet Purse</div>
+  </div>
+
+  <div class="stat-card">
+    <div id="stat-rank" class="stat-val" style="color: var(--accent-cyan);">
+      #{{ current_rank }}
+    </div>
+    <div class="stat-label">Live Rank</div>
+  </div>
+
+  <div class="stat-card">
+    <div id="stat-won" class="stat-val" style="color: #fbbf24;">
+      <span id="display-won-count">{{ team.questions_won }}</span> / 5
+    </div>
+    <div class="stat-label">Questions Won (Limit: 5)</div>
+  </div>
+
+  <div class="stat-card">
+    <div id="stat-completed" class="stat-val">
+      <span id="display-solved-count">{{ team.questions_completed }}</span> / 5
+    </div>
+    <div class="stat-label">Questions Solved</div>
+  </div>
+</div>
+
+<!-- SECTION 1: LIVE AUCTION HERO -->
+<div id="auction-container" class="card auction-hero {% if active_auction %}active{% endif %}">
+  <!-- Empty State (No Active Auction) -->
+  <div id="auction-empty-state" style="{% if active_auction %}display: none;{% endif %} text-align: center; padding: 2.5rem 1rem;">
+    <div style="font-size: 3.5rem; margin-bottom: 1rem; animation: pulse 2s infinite;">⏳</div>
+    <h2 style="font-size: 1.8rem; font-weight: 800; color: #fff; margin-bottom: 0.5rem;">WAITING FOR NEXT AUCTION</h2>
+    <p style="color: var(--text-secondary); max-width: 550px; margin: 0 auto; font-size: 1.05rem;">
+      The tournament host will launch the next question shortly. Maintain this tab open. Keep your audio enabled for bid alerts!
+    </p>
+  </div>
+
+  <!-- Active Auction State -->
+  <div id="auction-active-state" style="{% if not active_auction %}display: none;{% endif %}">
+    <div class="auction-header">
+      <div>
+        <span id="auction-category" class="category-tag">{{ active_auction.category if active_auction else 'Category' }}</span>
+        <span id="auction-type-badge" style="background: rgba(255,255,255,0.08); padding: 0.25rem 0.6rem; border-radius: 6px; font-size: 0.85rem; margin-left: 0.5rem; color: var(--text-secondary);">
+          {{ active_auction.question_type if active_auction else 'Numerical' }}
+        </span>
+      </div>
+      <div>
+        <span class="reward-tag">Cash Bounty: <strong id="auction-reward">₹{{ "%.2f"|format(active_auction.reward if active_auction else 0.0) }}</strong></span>
+      </div>
+    </div>
+
+    <!-- Question Text -->
+    <div id="auction-summary-text" class="question-text-box" style="font-size: 1.25rem; font-weight: 600; line-height: 1.5; color: #fff; margin: 1rem 0;">
+      {{ active_auction.question_text if active_auction else '' }}
+    </div>
+
+    <!-- Question Image (JPG / JPEG / PNG support) -->
+    <div id="auction-image-container" style="text-align: center; margin: 1rem 0; {% if not (active_auction and active_auction.question_image) %}display: none;{% endif %}">
+      <img id="auction-question-image" src="{{ active_auction.question_image if active_auction and active_auction.question_image else '' }}" alt="Question Diagram" style="max-height: 300px; max-width: 100%; border-radius: 8px; border: 1px solid var(--border-color); object-fit: contain;">
+    </div>
+
+    <!-- Real-time 10-Second Countdown Timer -->
+    <div class="timer-container">
+      <div id="auction-timer-box" class="timer-box">
+        <div id="auction-timer-digits" class="timer-digits">
+          {{ active_auction.time_remaining|int if active_auction else 10 }}
+        </div>
+        <div class="timer-label">Seconds</div>
+      </div>
+    </div>
+
+    <!-- Live Bid Price & Highest Bidder Status -->
+    <div class="bid-stats-grid">
+      <div class="stat-card">
+        <div id="auction-starting-bid" class="stat-val" style="font-size: 1.3rem; color: var(--text-secondary);">
+          ₹{{ "%.2f"|format(active_auction.starting_bid if active_auction else 0.0) }}
+        </div>
+        <div class="stat-label">Opening Price</div>
+      </div>
+
+      <div class="stat-card" style="border-color: var(--accent-gold); background: rgba(245, 158, 11, 0.08);">
+        <div id="auction-current-bid" class="stat-val" style="color: #fbbf24;">
+          ₹{{ "%.2f"|format(active_auction.current_bid if active_auction else 0.0) }}
+        </div>
+        <div class="stat-label">Current Highest Bid</div>
+      </div>
+
+      <div class="stat-card">
+        <div id="auction-highest-bidder" class="stat-val" style="font-size: 1.2rem; color: var(--accent-cyan); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+          {{ active_auction.current_bidder_code if active_auction and active_auction.current_bidder_code else 'No Bids Yet' }}
+        </div>
+        <div class="stat-label">Current Leader</div>
+      </div>
+    </div>
+
+    <!-- Next Bid Action -->
+    <div style="text-align: center; margin-top: 1rem;">
+      <div id="leader-notice" style="display: none; margin-bottom: 0.75rem; color: #34d399; font-weight: 700; font-size: 1.05rem;">
+        🌟 Your team currently leads this auction!
+      </div>
+      <button id="btn-place-bid" class="btn btn-gold btn-bid-action">
+        BID ₹<span id="btn-bid-amount">500.00</span>
+      </button>
+      <div id="bid-warning-msg" style="color: var(--accent-red); font-size: 0.9rem; margin-top: 0.5rem; font-weight: 600;"></div>
+    </div>
+  </div>
+</div>
+
+<!-- SECTION 2: 5-QUESTION WON REPOSITORY & SOLVING INTERFACE -->
+<div id="won-questions-panel" class="card" style="margin-bottom: 1.5rem; border-color: rgba(52, 211, 153, 0.3);">
+  <div class="card-title" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;">
+    <span style="color: #34d399; font-weight: 800; font-size: 1.2rem;">
+      🎯 YOUR WON QUESTIONS REPOSITORY (<span id="repo-count">{{ won_questions|length }}</span>/5)
+    </span>
+    <span style="font-size: 0.85rem; color: var(--text-muted);">
+      Limit: Exactly 5 Questions Per Team
+    </span>
+  </div>
+
+  <p style="color: var(--text-secondary); font-size: 0.95rem; margin-bottom: 1.25rem;">
+    Every question won at auction is safely queued here under your team's account. Continue bidding until your team collects 5 questions, then solve them one by one below to earn cash bounties.
+  </p>
+
+  <!-- Empty state if no questions won yet -->
+  <div id="won-empty-msg" style="{% if won_questions %}display: none;{% endif %} text-align: center; padding: 2rem; border: 1px dashed var(--border-color); border-radius: 8px;">
+    <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">📥</div>
+    <div style="color: var(--text-secondary); font-size: 1.05rem;">No questions won yet.</div>
+    <small style="color: var(--text-muted);">Place winning bids in live auctions above to fill your 5 question slots!</small>
+  </div>
+
+  <!-- Won questions list container -->
+  <div id="won-questions-container" style="display: grid; grid-template-columns: 1fr; gap: 1.25rem;">
+    {% for q in won_questions %}
+      <div class="card won-question-item" data-auction-id="{{ q.auction_id }}" style="background: rgba(14, 21, 38, 0.7); border: 1px solid var(--border-color); padding: 1.25rem;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; flex-wrap: wrap; gap: 0.5rem;">
+          <div>
+            <span class="category-tag" style="font-size: 0.8rem;">{{ q.category }}</span>
+            <span style="font-size: 0.8rem; color: var(--text-muted); margin-left: 0.5rem;">Auction #{{ q.auction_id }}</span>
+          </div>
+          <div>
+            <span class="reward-tag" style="font-size: 0.85rem;">Reward: ₹{{ "%.2f"|format(q.reward) }}</span>
+            <span style="font-size: 0.8rem; color: #fbbf24; margin-left: 0.5rem;">(Paid: ₹{{ "%.2f"|format(q.winning_bid) }})</span>
+          </div>
+        </div>
+
+        <div style="font-size: 1.05rem; font-weight: 600; color: #fff; margin-bottom: 0.75rem;">
+          {{ q.question_text }}
+        </div>
+
+        {% if q.question_image %}
+          <div style="text-align: center; margin: 0.75rem 0;">
+            <img src="{{ q.question_image }}" alt="Question Image" style="max-height: 220px; max-width: 100%; border-radius: 6px; border: 1px solid var(--border-color); object-fit: contain;">
+          </div>
+        {% endif %}
+
+        <!-- Solving area or solved result -->
+        <div style="margin-top: 1rem; padding-top: 0.75rem; border-top: 1px solid rgba(255,255,255,0.06);">
+          {% if q.is_solved %}
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
+              <div>
+                {% if q.is_correct %}
+                  <span style="background: rgba(16,185,129,0.2); color: #34d399; font-weight: 700; padding: 0.35rem 0.8rem; border-radius: 6px; font-size: 0.9rem;">
+                    ✅ CORRECT SOLUTION (+₹{{ "%.2f"|format(q.reward_credited) }})
+                  </span>
+                {% else %}
+                  <span style="background: rgba(239,68,68,0.2); color: #f87171; font-weight: 700; padding: 0.35rem 0.8rem; border-radius: 6px; font-size: 0.9rem;">
+                    ❌ INCORRECT ATTEMPT (₹0.00)
+                  </span>
+                {% endif %}
+              </div>
+              <div style="font-size: 0.85rem; color: var(--text-muted);">
+                Submitted Answer: <strong style="color: #fff;">{{ q.submitted_answer }}</strong>
+              </div>
+            </div>
+          {% else %}
+            <!-- Unsolved Answer Submission Form -->
+            <div id="solve-form-{{ q.auction_id }}" style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap;">
+              <input type="text" id="solve-input-{{ q.auction_id }}" class="form-control" placeholder="Enter integer answer..." style="max-width: 250px; font-weight: 700; font-size: 1.05rem;">
+              <button class="btn btn-primary btn-submit-solution" data-auction-id="{{ q.auction_id }}" style="font-weight: 700; padding: 0.5rem 1.25rem;">
+                Submit Solution
+              </button>
+              <div id="solve-feedback-{{ q.auction_id }}" style="font-size: 0.9rem; font-weight: 600;"></div>
+            </div>
+          {% endif %}
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+</div>
+
+<!-- SECTION 3: TOURNAMENT LEADERBOARD & TRANSACTION LEDGER -->
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 1.5rem;">
+  <!-- Live Leaderboard -->
+  <div class="card">
+    <div class="card-title">
+      <span>🏆 Tournament Leaderboard</span>
+      <span style="font-size: 0.8rem; color: var(--accent-cyan);">Live Updates</span>
+    </div>
+    <div class="table-responsive" style="max-height: 350px; overflow-y: auto;">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Rank</th>
+            <th>Team</th>
+            <th>Purse</th>
+            <th>Solved</th>
+            <th>Won</th>
+          </tr>
+        </thead>
+        <tbody id="leaderboard-body">
+          <!-- Populated dynamically via Socket.IO -->
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Team Ledger / History -->
+  <div class="card">
+    <div class="card-title">
+      <span>📜 Your Wallet Ledger</span>
+      <button id="btn-refresh-ledger" class="btn btn-secondary" style="padding: 0.25rem 0.6rem; font-size: 0.75rem;">Refresh</button>
+    </div>
+    <div class="table-responsive" style="max-height: 350px; overflow-y: auto;">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Time</th>
+            <th>Type</th>
+            <th>Amount</th>
+            <th>Balance</th>
+          </tr>
+        </thead>
+        <tbody id="transactions-body">
+          {% for tx in transactions %}
+            <tr>
+              <td style="font-size: 0.8rem; color: var(--text-muted);">{{ tx.created_at_formatted }}</td>
+              <td>
+                <span style="font-size: 0.75rem; font-weight: 700; padding: 0.2rem 0.4rem; border-radius: 4px; background: {% if tx.transaction_type=='REWARD' %}rgba(16,185,129,0.2); color:#34d399;{% elif tx.transaction_type=='BID_PAYMENT' %}rgba(239,68,68,0.2); color:#f87171;{% else %}rgba(59,130,246,0.2); color:#60a5fa;{% endif %}">
+                  {{ tx.transaction_type }}
+                </span>
+              </td>
+              <td style="font-weight: 700; color: {% if tx.amount > 0 %}#34d399{% else %}#f87171{% endif %};">
+                {{ "+" if tx.amount > 0 else "" }}₹{{ "%.2f"|format(tx.amount) }}
+              </td>
+              <td style="font-weight: 600;">₹{{ "%.2f"|format(tx.balance_after) }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  window.TEAM_ID = {{ team.id }};
+  window.TEAM_CODE = "{{ team.team_code }}";
+  window.INITIAL_BALANCE = {{ team.current_balance | float }};
+  window.IS_DISQUALIFIED = {{ 'true' if team.is_disqualified else 'false' }};
+  window.VIOLATION_COUNT = {{ team.violation_count }};
+</script>
+<script src="{{ url_for('static', filename='js/team_dashboard.js') }}"></script>
+{% endblock %}

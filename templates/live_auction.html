@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PROJECTOR LIVE SCREEN | MATH AUCTION</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <style>
+    body {
+      background: #040711;
+      overflow-x: hidden;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      min-height: 100vh;
+      padding: 2rem;
+    }
+    .proj-title {
+      font-size: 3.5rem;
+      font-weight: 900;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      background: linear-gradient(135deg, #fbbf24, #f59e0b, #ef4444);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      text-align: center;
+      margin-bottom: 0.5rem;
+    }
+    .proj-tagline {
+      text-align: center;
+      font-size: 1.25rem;
+      color: var(--text-secondary);
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      margin-bottom: 2rem;
+    }
+    .proj-main-card {
+      background: #0e1526;
+      border: 3px solid var(--accent-blue);
+      border-radius: 24px;
+      padding: 3rem;
+      box-shadow: 0 0 60px rgba(59, 130, 246, 0.25);
+      position: relative;
+      margin-bottom: 2rem;
+    }
+    .proj-main-card.active {
+      border-color: var(--accent-gold);
+      box-shadow: 0 0 80px rgba(245, 158, 11, 0.4);
+    }
+    .proj-main-card.ending-soon {
+      border-color: var(--accent-red);
+      box-shadow: 0 0 100px rgba(239, 68, 68, 0.6);
+      animation: pulseBorder 1s infinite alternate;
+    }
+    .proj-question-text {
+      font-size: 2.2rem;
+      font-weight: 700;
+      line-height: 1.4;
+      color: #fff;
+      margin: 1.5rem 0 2rem;
+      text-align: center;
+    }
+    .proj-timer-circle {
+      width: 220px;
+      height: 220px;
+      border-radius: 50%;
+      background: #141c30;
+      border: 8px solid var(--accent-blue);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 2rem;
+      transition: all 0.2s ease;
+    }
+    .proj-timer-circle.warning {
+      border-color: var(--accent-red);
+      animation: shake 0.3s infinite ease-in-out;
+    }
+    .proj-timer-circle.warning .proj-timer-num {
+      color: var(--accent-red);
+    }
+    .proj-timer-num {
+      font-size: 7rem;
+      font-weight: 900;
+      font-family: monospace;
+      color: #fff;
+      line-height: 1;
+    }
+    .proj-stats-row {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 1.5rem;
+      margin-top: 2rem;
+    }
+    .proj-stat-box {
+      background: #141d33;
+      border: 2px solid var(--border-color);
+      border-radius: 16px;
+      padding: 1.5rem;
+      text-align: center;
+    }
+    .proj-stat-box.highlight {
+      border-color: var(--accent-gold);
+      background: rgba(245, 158, 11, 0.1);
+    }
+    .proj-stat-num {
+      font-size: 2.8rem;
+      font-weight: 900;
+      color: #fff;
+    }
+    .proj-stat-lbl {
+      font-size: 1rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      font-weight: 700;
+      letter-spacing: 1px;
+      margin-top: 0.5rem;
+    }
+    .winner-overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(4, 7, 17, 0.95);
+      border-radius: 20px;
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+      animation: fadeIn 0.4s ease;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: scale(0.95); }
+      to { opacity: 1; transform: scale(1); }
+    }
+  </style>
+</head>
+<body class="projector-body">
+
+  <header>
+    <div class="proj-title">MATH AUCTION</div>
+    <div class="proj-tagline">Intercollegiate Mathematical Quiz & Auction Championship</div>
+  </header>
+
+  <main>
+    <div id="proj-main-card" class="proj-main-card {% if active_auction %}active{% endif %}">
+      <!-- Winner Celebration Overlay -->
+      <div id="proj-winner-overlay" class="winner-overlay">
+        <div style="font-size: 5rem; margin-bottom: 1rem;">🏆</div>
+        <div style="font-size: 2rem; color: var(--accent-gold); text-transform: uppercase; font-weight: 800; letter-spacing: 2px;">
+          AUCTION CONCLUDED
+        </div>
+        <div id="proj-winner-name" style="font-size: 4rem; font-weight: 900; color: #fff; margin: 1rem 0;">
+          TEAM WINNER
+        </div>
+        <div id="proj-winning-bid-banner" style="font-size: 2.2rem; color: #34d399; font-weight: 800;">
+          Winning Bid: ₹0.00
+        </div>
+      </div>
+
+      <!-- Standby Display when no auction -->
+      <div id="proj-standby" style="{% if active_auction %}display: none;{% endif %} text-align: center; padding: 4rem 1rem;">
+        <div style="font-size: 5rem; margin-bottom: 1rem; animation: pulse 2s infinite;">🎯</div>
+        <h2 style="font-size: 2.8rem; font-weight: 800; color: #fff; margin-bottom: 1rem;">NEXT AUCTION STARTING SOON</h2>
+        <p style="font-size: 1.4rem; color: var(--text-secondary); max-width: 700px; margin: 0 auto;">
+          The competition director will bring up the next problem shortly. Prepare your opening bids!
+        </p>
+      </div>
+
+      <!-- Active Auction Display -->
+      <div id="proj-active" style="{% if not active_auction %}display: none;{% endif %}">
+        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid var(--border-color); padding-bottom: 1.5rem;">
+          <div>
+            <span id="proj-category" class="category-tag" style="font-size: 1.2rem; padding: 0.5rem 1.25rem;">
+              {{ active_auction.category if active_auction else 'MATHEMATICS' }}
+            </span>
+            <span id="proj-type" style="background: rgba(255,255,255,0.1); padding: 0.5rem 1rem; border-radius: 8px; font-size: 1.1rem; color: var(--text-secondary); margin-left: 1rem;">
+              {{ active_auction.question_type if active_auction else 'Numerical' }}
+            </span>
+          </div>
+          <div class="reward-tag" style="font-size: 1.25rem; padding: 0.5rem 1.25rem;">
+            Bounty Reward: <strong id="proj-reward" style="color: #fbbf24;">₹{{ "%.2f"|format(active_auction.reward if active_auction else 0.0) }}</strong>
+          </div>
+        </div>
+
+        <div id="proj-question" class="proj-question-text">
+          {{ active_auction.question_text if active_auction else '' }}
+        </div>
+
+        <!-- Question Image Container (Supports JPG, JPEG, PNG) -->
+        <div id="proj-image-container" style="text-align: center; margin: 1.5rem auto; max-width: 900px; {% if not (active_auction and active_auction.question_image) %}display: none;{% endif %}">
+          <img id="proj-question-image" src="{{ active_auction.question_image if active_auction and active_auction.question_image else '' }}" alt="Question Illustration" style="max-height: 420px; max-width: 100%; border-radius: 16px; border: 2px solid var(--border-color); object-fit: contain; box-shadow: 0 10px 30px rgba(0,0,0,0.6);">
+        </div>
+
+        <!-- Giant Timer -->
+        <div class="proj-timer-circle" id="proj-timer-box">
+          <div class="proj-timer-num" id="proj-timer-digits">
+            {{ active_auction.time_remaining|int if active_auction else 10 }}
+          </div>
+          <div style="font-size: 1rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 2px;">Seconds</div>
+        </div>
+
+        <!-- Four Large Metric Cards -->
+        <div class="proj-stats-row">
+          <div class="proj-stat-box">
+            <div class="proj-stat-num" id="proj-starting-bid" style="color: var(--text-secondary);">
+              ₹{{ "%.2f"|format(active_auction.starting_bid if active_auction else 0.0) }}
+            </div>
+            <div class="proj-stat-lbl">Opening Bid</div>
+          </div>
+
+          <div class="proj-stat-box highlight">
+            <div class="proj-stat-num" id="proj-current-bid" style="color: #fbbf24;">
+              ₹{{ "%.2f"|format(active_auction.current_bid if active_auction else 0.0) }}
+            </div>
+            <div class="proj-stat-lbl">Current Bid</div>
+          </div>
+
+          <div class="proj-stat-box" style="grid-column: span 2; border-color: var(--accent-cyan); background: rgba(6, 182, 212, 0.08);">
+            <div class="proj-stat-num" id="proj-leader-team" style="color: #22d3ee; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+              {{ active_auction.current_bidder_code if active_auction and active_auction.current_bidder_code else 'Waiting For Bids' }}
+            </div>
+            <div class="proj-stat-lbl">Current Highest Bidder</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <footer style="text-align: center; color: var(--text-muted); font-size: 0.95rem; border-top: 1px solid var(--border-color); padding-top: 1.5rem;">
+    MATH AUCTION LIVE PROJECTION SYSTEM &bull; AUTHORITATIVE SERVER CLOCK SYNCHRONIZED
+  </footer>
+
+  <script src="{{ url_for('static', filename='js/socket.io.min.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/sound.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/live_auction.js') }}"></script>
+</body>
+</html>

@@ -1,0 +1,503 @@
+{% extends 'base.html' %}
+{% block title %}Host Control Panel | MATH AUCTION{% endblock %}
+
+{% block content %}
+<!-- HEADER AND ACTION BUTTONS -->
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem;">
+  <div>
+    <h1 style="font-size: 1.8rem; font-weight: 800; color: #fff;">Tournament Host Control Room</h1>
+    <p style="color: var(--text-secondary); font-size: 0.95rem;">
+      Live auction orchestration, question bank management, and real-time team surveillance.
+    </p>
+  </div>
+  <div style="display: flex; gap: 0.75rem; flex-wrap: wrap;">
+    <button id="btn-open-add-team-modal" class="btn btn-primary" style="font-weight: 700;">
+      ➕ Add Team
+    </button>
+    {% if is_dev_mode %}
+      <button id="btn-reset-test-data" class="btn btn-danger" style="font-weight: 700;">
+        ⚠️ Reset Test Data
+      </button>
+    {% endif %}
+    <a href="{{ url_for('host.live_auction_projector') }}" target="_blank" class="btn btn-gold">
+      📽️ Open Projector View
+    </a>
+  </div>
+</div>
+
+<!-- SYSTEM STATUS BAR (REAL-TIME METRICS) -->
+<div class="card" style="margin-bottom: 1.5rem; padding: 1.25rem; background: linear-gradient(135deg, rgba(14,21,38,0.95), rgba(20,29,51,0.95)); border: 1px solid rgba(59,130,246,0.3);">
+  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
+    <span style="font-weight: 800; font-size: 0.9rem; letter-spacing: 1px; color: var(--accent-cyan); text-transform: uppercase;">
+      ⚡ Real-Time System Telemetry
+    </span>
+    <span style="font-size: 0.8rem; color: var(--text-muted);">Capacity: 80+ Teams Concurrent</span>
+  </div>
+  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 1rem;">
+    <div class="stat-card" style="padding: 0.75rem;">
+      <div id="stat-registered-teams" class="stat-val" style="font-size: 1.4rem;">{{ system_stats.registered_teams }}</div>
+      <div class="stat-label">Registered Teams</div>
+    </div>
+    <div class="stat-card" style="padding: 0.75rem; border-color: rgba(16,185,129,0.4);">
+      <div id="stat-online-teams" class="stat-val" style="font-size: 1.4rem; color: #34d399;">{{ system_stats.online_teams }}</div>
+      <div class="stat-label">Online / Active</div>
+    </div>
+    <div class="stat-card" style="padding: 0.75rem;">
+      <div id="stat-disqualified-teams" class="stat-val" style="font-size: 1.4rem; color: {% if system_stats.disqualified_teams > 0 %}#f87171{% else %}var(--text-muted){% endif %};">
+        {{ system_stats.disqualified_teams }}
+      </div>
+      <div class="stat-label">Disqualified</div>
+    </div>
+    <div class="stat-card" style="padding: 0.75rem;">
+      <div id="stat-completed-teams" class="stat-val" style="font-size: 1.4rem; color: #60a5fa;">{{ system_stats.completed_teams }}</div>
+      <div class="stat-label">Completed Teams</div>
+    </div>
+    <div class="stat-card" style="padding: 0.75rem;">
+      <div id="stat-total-questions" class="stat-val" style="font-size: 1.4rem;">{{ system_stats.total_questions }}</div>
+      <div class="stat-label">Questions in Bank</div>
+    </div>
+    <div class="stat-card" style="padding: 0.75rem;">
+      <div id="stat-available-questions" class="stat-val" style="font-size: 1.4rem; color: #fbbf24;">{{ system_stats.available_questions }}</div>
+      <div class="stat-label">Available Questions</div>
+    </div>
+    <div class="stat-card" style="padding: 0.75rem;">
+      <div id="stat-current-auction-id" class="stat-val" style="font-size: 1.4rem; color: var(--accent-cyan);">
+        {{ '#' ~ active_auction.id if active_auction else 'None' }}
+      </div>
+      <div class="stat-label">Live Auction</div>
+    </div>
+    <div class="stat-card" style="padding: 0.75rem; border-color: var(--accent-gold);">
+      <div id="stat-current-bid" class="stat-val" style="font-size: 1.4rem; color: #fbbf24;">
+        ₹{{ "%.2f"|format(active_auction.current_bid if active_auction else 0.0) }}
+      </div>
+      <div class="stat-label">Current Bid</div>
+    </div>
+    <div class="stat-card" style="padding: 0.75rem;">
+      <div id="stat-current-bidder" class="stat-val" style="font-size: 1.2rem; color: #34d399; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+        {{ active_auction.current_bidder_code if active_auction and active_auction.current_bidder_code else 'No Bids' }}
+      </div>
+      <div class="stat-label">Current Leader</div>
+    </div>
+  </div>
+</div>
+
+<!-- LIVE AUCTION MONITOR CARD -->
+<div id="host-auction-card" class="card auction-hero {% if active_auction %}active{% endif %}">
+  <div class="card-title">
+    <span>📡 LIVE AUCTION MONITOR</span>
+    <span id="host-auction-status-badge" class="badge-math" style="background: {% if active_auction %}var(--accent-green){% else %}var(--text-muted){% endif %};">
+      {{ active_auction.status if active_auction else 'STANDBY / NO LIVE AUCTION' }}
+    </span>
+  </div>
+
+  <div id="host-no-auction" style="{% if active_auction %}display: none;{% endif %} text-align: center; padding: 2rem;">
+    <p style="color: var(--text-secondary); font-size: 1.1rem; margin-bottom: 1rem;">
+      No auction is currently active. Select an available question from the Question Bank below to launch an auction.
+    </p>
+  </div>
+
+  <div id="host-active-auction" style="{% if not active_auction %}display: none;{% endif %}">
+    <div class="auction-header">
+      <div>
+        <span id="host-category" class="category-tag">{{ active_auction.category if active_auction else '' }}</span>
+        <span id="host-type" style="background: rgba(255,255,255,0.08); padding: 0.25rem 0.6rem; border-radius: 6px; font-size: 0.85rem; margin-left: 0.5rem; color: var(--text-secondary);">
+          {{ active_auction.question_type if active_auction else '' }}
+        </span>
+      </div>
+      <div>
+        <span class="reward-tag">Bounty Reward: <strong id="host-reward">₹{{ "%.2f"|format(active_auction.reward if active_auction else 0.0) }}</strong></span>
+      </div>
+    </div>
+
+    <!-- Question Text -->
+    <div id="host-question-text" style="font-size: 1.15rem; font-weight: 600; color: #fff; margin-bottom: 1rem;">
+      {{ active_auction.question_text if active_auction else '' }}
+    </div>
+
+    <!-- Question Image (if any) -->
+    <div id="host-image-container" style="text-align: center; margin-bottom: 1.5rem; {% if not (active_auction and active_auction.question_image) %}display: none;{% endif %}">
+      <img id="host-question-image" src="{{ active_auction.question_image if active_auction and active_auction.question_image else '' }}" alt="Question Image" style="max-height: 250px; max-width: 100%; border-radius: 8px; border: 1px solid var(--border-color); object-fit: contain;">
+    </div>
+
+    <!-- Timer and Bid Status -->
+    <div style="display: grid; grid-template-columns: 160px 1fr; gap: 1.5rem; align-items: center; margin-bottom: 1.5rem;">
+      <div class="timer-box" id="host-timer-box" style="margin: 0 auto;">
+        <div id="host-timer-digits" class="timer-digits">
+          {{ active_auction.time_remaining|int if active_auction else 10 }}
+        </div>
+        <div class="timer-label">Seconds</div>
+      </div>
+
+      <div class="bid-stats-grid" style="margin-bottom: 0;">
+        <div class="stat-card">
+          <div id="host-starting-bid" class="stat-val" style="font-size: 1.3rem;">
+            ₹{{ "%.2f"|format(active_auction.starting_bid if active_auction else 0.0) }}
+          </div>
+          <div class="stat-label">Opening Price</div>
+        </div>
+        <div class="stat-card" style="border-color: var(--accent-gold);">
+          <div id="host-current-bid" class="stat-val" style="color: #fbbf24;">
+            ₹{{ "%.2f"|format(active_auction.current_bid if active_auction else 0.0) }}
+          </div>
+          <div class="stat-label">Current Bid</div>
+        </div>
+        <div class="stat-card">
+          <div id="host-current-bidder" class="stat-val" style="color: var(--accent-cyan); font-size: 1.2rem;">
+            {{ active_auction.current_bidder_code if active_auction and active_auction.current_bidder_code else 'No Bids' }}
+          </div>
+          <div class="stat-label">Leading Team</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Host Emergency Controls -->
+    <div style="display: flex; gap: 1rem; justify-content: flex-end; border-top: 1px solid var(--border-color); padding-top: 1rem;">
+      <input type="hidden" id="host-active-auction-id" value="{{ active_auction.id if active_auction else '' }}">
+      <button id="btn-cancel-auction" class="btn btn-secondary">
+        ⚠️ Cancel Auction (No Winner)
+      </button>
+      <button id="btn-end-auction" class="btn btn-danger">
+        🔨 End Auction Now (Finalize Winner)
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- LIVE BID FEED & PARTICIPATING TEAMS -->
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 1.5rem;">
+  <!-- Live Bid Stream -->
+  <div class="card">
+    <div class="card-title">
+      <span>⚡ Live Bid Stream</span>
+      <span style="font-size: 0.8rem; color: var(--accent-cyan);">Real-Time</span>
+    </div>
+    <div class="table-responsive" style="max-height: 300px; overflow-y: auto;">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Time</th>
+            <th>Team</th>
+            <th>Bid Amount</th>
+          </tr>
+        </thead>
+        <tbody id="host-bids-body">
+          {% for b in recent_bids %}
+            <tr>
+              <td style="font-size: 0.8rem; color: var(--text-muted);">{{ b.bid_time_formatted }}</td>
+              <td style="font-weight: 600;">{{ b.team_code }} <small>({{ b.team_name }})</small></td>
+              <td style="color: #fbbf24; font-weight: 700;">₹{{ "%.2f"|format(b.bid_amount) }}</td>
+            </tr>
+          {% else %}
+            <tr id="row-no-bids"><td colspan="3" style="text-align: center; color: var(--text-muted);">No bids placed on active auction yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Participating Teams Monitor -->
+  <div class="card">
+    <div class="card-title" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;">
+      <span>👥 Participating Teams (<span id="teams-count-display">{{ teams|length }}</span>)</span>
+      <input type="text" id="input-search-teams" placeholder="Search team..." style="background: var(--bg-hover); border: 1px solid var(--border-color); color: #fff; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.8rem; width: 140px;">
+    </div>
+    <div class="table-responsive" style="max-height: 300px; overflow-y: auto;">
+      <table class="data-table" id="table-teams-list">
+        <thead>
+          <tr>
+            <th>Team</th>
+            <th>Purse</th>
+            <th>Won</th>
+            <th>Done</th>
+            <th>Strikes</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody id="host-teams-body">
+          {% for t in teams %}
+            <tr data-team-code="{{ t.team_code }}" data-team-name="{{ t.team_name|lower }}">
+              <td style="font-weight: 700;">
+                {{ t.team_code }}
+                <div style="font-size: 0.8rem; color: var(--text-muted); font-weight: normal;">{{ t.team_name }}</div>
+              </td>
+              <td style="color: #34d399; font-weight: 700;">₹{{ "%.2f"|format(t.current_balance) }}</td>
+              <td>{{ t.questions_won }}</td>
+              <td>{{ t.questions_completed }}/5</td>
+              <td style="font-weight: 700; color: {% if t.violation_count >= 3 %}#f87171{% elif t.violation_count >= 1 %}#fbbf24{% else %}var(--text-muted){% endif %};">
+                {{ t.violation_count }}/3
+              </td>
+              <td>
+                {% if not t.is_active %}
+                  <span style="background: rgba(100,116,139,0.2); color: #94a3b8; padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.75rem; font-weight: 700;">INACTIVE</span>
+                {% elif t.is_disqualified %}
+                  <span style="background: rgba(239,68,68,0.2); color: #f87171; padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.75rem; font-weight: 700;">DISQUALIFIED</span>
+                {% elif t.questions_completed >= 5 %}
+                  <span style="background: rgba(59,130,246,0.2); color: #60a5fa; padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.75rem; font-weight: 700;">COMPLETED</span>
+                {% else %}
+                  <span style="background: rgba(16,185,129,0.2); color: #34d399; padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.75rem; font-weight: 700;">{{ t.status }}</span>
+                {% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- QUESTION BANK SECTION -->
+<div class="card">
+  <div class="card-title" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
+    <div>
+      <span>📚 Question Bank (<span id="questions-count-display">{{ questions|length }}</span> Questions)</span>
+      <span style="font-size: 0.85rem; color: var(--text-muted); margin-left: 0.5rem;">Target: 90 Questions | Integer Answers Only</span>
+    </div>
+    <button type="button" id="btn-open-add-question-modal" class="btn btn-primary" style="font-size: 0.8rem; padding: 0.35rem 0.8rem;">
+      ➕ Add New Question
+    </button>
+  </div>
+  <div class="table-responsive" style="max-height: 450px; overflow-y: auto;">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Category</th>
+          <th>Question Description</th>
+          <th>Image</th>
+          <th>Type</th>
+          <th>Starting Bid</th>
+          <th>Reward</th>
+          <th>Status</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for q in questions %}
+          <tr id="q-row-{{ q.id }}">
+            <td style="font-weight: 700;">#{{ q.id }}</td>
+            <td><span class="category-tag" style="font-size: 0.75rem;">{{ q.category }}</span></td>
+            <td style="max-width: 360px; font-size: 0.9rem;">
+              {{ q.question_text }}
+            </td>
+            <td>
+              <div id="q-img-wrap-{{ q.id }}">
+                {% if q.question_image %}
+                  <div style="margin-bottom: 0.25rem;">
+                    <a href="{{ q.question_image }}" target="_blank">
+                      <img src="{{ q.question_image }}" alt="Q{{ q.id }}" style="height: 36px; max-width: 55px; object-fit: contain; border-radius: 4px; border: 1px solid var(--border-color);">
+                    </a>
+                  </div>
+                {% endif %}
+              </div>
+              <label class="btn btn-secondary" style="cursor: pointer; padding: 0.2rem 0.45rem; font-size: 0.72rem; margin: 0; display: inline-flex; align-items: center; gap: 0.25rem;" title="Upload JPEG or PNG photo">
+                <span>📷 <span id="q-img-btn-label-{{ q.id }}">{% if q.question_image %}Change{% else %}Attach{% endif %}</span></span>
+                <input type="file" class="input-upload-image" data-question-id="{{ q.id }}" accept="image/png, image/jpeg, image/jpg, image/webp" style="display: none;">
+              </label>
+            </td>
+            <td><span style="font-size: 0.8rem; background: var(--bg-hover); padding: 0.2rem 0.5rem; border-radius: 4px;">{{ q.question_type }}</span></td>
+            <td style="font-weight: 600;">₹{{ "%.2f"|format(q.starting_bid) }}</td>
+            <td style="font-weight: 700; color: #fbbf24;">₹{{ "%.2f"|format(q.reward) }}</td>
+            <td>
+              <span style="font-size: 0.75rem; font-weight: 700; padding: 0.2rem 0.5rem; border-radius: 4px; background: {% if q.status=='AVAILABLE' %}rgba(16,185,129,0.2); color:#34d399;{% elif q.status=='LIVE' %}rgba(245,158,11,0.2); color:#fbbf24;{% elif q.status=='QUESTION_ACTIVE' %}rgba(59,130,246,0.2); color:#60a5fa;{% else %}rgba(100,116,139,0.2); color:#94a3b8;{% endif %}">
+                {{ q.status }}
+              </span>
+            </td>
+            <td>
+              {% if q.status == 'AVAILABLE' %}
+                <button class="btn btn-gold btn-start-auction" data-question-id="{{ q.id }}" style="padding: 0.35rem 0.8rem; font-size: 0.8rem;" {% if active_auction %}disabled title="Wait for active auction to conclude"{% endif %}>
+                  🚀 Start Auction
+                </button>
+              {% else %}
+                <button class="btn btn-secondary" disabled style="padding: 0.35rem 0.8rem; font-size: 0.8rem; opacity: 0.4;">
+                  {{ q.status }}
+                </button>
+              {% endif %}
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- AUDIT: VIOLATIONS & AUCTION HISTORY -->
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 1.5rem; margin-top: 1.5rem;">
+  <!-- Anti-Cheat Violation Log -->
+  <div class="card">
+    <div class="card-title">
+      <span>🛡️ Anti-Cheat Violations</span>
+      <span style="font-size: 0.8rem; color: var(--accent-red);">3-Strike System</span>
+    </div>
+    <div class="table-responsive" style="max-height: 280px; overflow-y: auto;">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Time</th>
+            <th>Team</th>
+            <th>Type</th>
+            <th>Strike</th>
+          </tr>
+        </thead>
+        <tbody id="host-violations-body">
+          {% for v in violations %}
+            <tr>
+              <td style="font-size: 0.8rem; color: var(--text-muted);">{{ v.occurred_at_formatted }}</td>
+              <td style="font-weight: 600;">{{ v.team_code }}</td>
+              <td style="font-size: 0.8rem; color: var(--accent-red);">{{ v.violation_type }}</td>
+              <td>
+                <span style="background: rgba(239,68,68,0.2); color: #f87171; font-weight: 700; padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.75rem;">
+                  Strike {{ v.violation_count }}/3
+                </span>
+              </td>
+            </tr>
+          {% else %}
+            <tr><td colspan="4" style="text-align: center; color: var(--text-muted);">No integrity violations recorded.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Past Auction History -->
+  <div class="card">
+    <div class="card-title">
+      <span>🏛️ Auction History</span>
+      <span style="font-size: 0.8rem; color: var(--text-muted);">Completed</span>
+    </div>
+    <div class="table-responsive" style="max-height: 280px; overflow-y: auto;">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Category</th>
+            <th>Winning Bid</th>
+            <th>Winner</th>
+          </tr>
+        </thead>
+        <tbody id="host-history-body">
+          {% for h in auction_history %}
+            <tr>
+              <td style="font-weight: 700;">#{{ h.id }}</td>
+              <td>{{ h.category }}</td>
+              <td style="font-weight: 700; color: #fbbf24;">₹{{ "%.2f"|format(h.winning_bid) }}</td>
+              <td style="font-weight: 600; color: var(--accent-cyan);">
+                {{ h.winner_code if h.winner_code else 'No Bids' }}
+              </td>
+            </tr>
+          {% else %}
+            <tr><td colspan="4" style="text-align: center; color: var(--text-muted);">No past auctions yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ADD TEAM MODAL DIALOG -->
+<div id="modal-add-team" class="modal-backdrop" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.8); z-index: 9999; display: none; align-items: center; justify-content: center; backdrop-filter: blur(4px);">
+  <div class="card" style="width: 100%; max-width: 480px; margin: 1rem; border-color: var(--accent-blue);">
+    <div class="card-title">
+      <span>➕ Register New Team</span>
+      <button type="button" id="btn-close-add-team-modal" style="background: transparent; border: none; color: var(--text-muted); font-size: 1.25rem; cursor: pointer;">&times;</button>
+    </div>
+    <form id="form-add-team" onsubmit="return false;">
+      <div class="form-group" style="margin-bottom: 1rem;">
+        <label class="form-label" for="add-team-name">Team Name</label>
+        <input type="text" id="add-team-name" class="form-control" placeholder="e.g. Apex Predators" required>
+      </div>
+
+      <div class="form-group" style="margin-bottom: 1rem;">
+        <label class="form-label" for="add-team-code">Team Code / Login ID</label>
+        <input type="text" id="add-team-code" class="form-control" placeholder="e.g. TEAM081" required style="text-transform: uppercase;">
+        <small style="color: var(--text-muted);">Must be unique. Format: TEAMxxx</small>
+      </div>
+
+      <div class="form-group" style="margin-bottom: 1rem;">
+        <label class="form-label" for="add-team-password">Password</label>
+        <input type="password" id="add-team-password" class="form-control" placeholder="Enter secure team password" required>
+      </div>
+
+      <div class="form-group" style="margin-bottom: 1.5rem;">
+        <label class="form-label" for="add-team-balance">Starting Purse Balance (₹)</label>
+        <input type="number" id="add-team-balance" class="form-control" value="{{ default_starting_balance }}" min="0" step="100">
+        <small style="color: var(--text-muted);">Default competition purse is ₹10,000.00</small>
+      </div>
+
+      <div id="add-team-error-msg" style="display: none; color: var(--accent-red); margin-bottom: 1rem; font-weight: 600;"></div>
+      <div id="add-team-success-msg" style="display: none; color: #34d399; margin-bottom: 1rem; font-weight: 600;"></div>
+
+      <div style="display: flex; gap: 0.75rem; justify-content: flex-end;">
+        <button type="button" id="btn-cancel-add-team" class="btn btn-secondary">Cancel</button>
+        <button type="button" id="btn-submit-add-team" class="btn btn-primary" style="font-weight: 700;">Create Team</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ADD QUESTION MODAL DIALOG -->
+<div id="modal-add-question" class="modal-backdrop" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.8); z-index: 9999; align-items: center; justify-content: center; backdrop-filter: blur(4px);">
+  <div class="card" style="width: 100%; max-width: 540px; margin: 1rem; border-color: var(--accent-gold); max-height: 90vh; overflow-y: auto;">
+    <div class="card-title">
+      <span>➕ Add New Question</span>
+      <button type="button" id="btn-close-add-question-modal" style="background: transparent; border: none; color: var(--text-muted); font-size: 1.25rem; cursor: pointer;">&times;</button>
+    </div>
+    <form id="form-add-question" onsubmit="return false;" enctype="multipart/form-data">
+      <div class="form-group" style="margin-bottom: 1rem;">
+        <label class="form-label" for="add-q-category">Category</label>
+        <input type="text" id="add-q-category" class="form-control" placeholder="e.g. CRYARITHMETIC, FINTECH, TRADING" required>
+      </div>
+
+      <div class="form-group" style="margin-bottom: 1rem;">
+        <label class="form-label" for="add-q-text">Question Description</label>
+        <textarea id="add-q-text" class="form-control" rows="3" placeholder="Enter mathematical problem description..." required></textarea>
+      </div>
+
+      <div class="form-group" style="margin-bottom: 1rem;">
+        <label class="form-label" for="add-q-file">Question Photo / Diagram (JPEG / PNG)</label>
+        <input type="file" id="add-q-file" class="form-control" accept="image/png, image/jpeg, image/jpg, image/webp">
+        <small style="color: var(--text-muted);">Optional. Attach equation, graph, or problem diagram.</small>
+      </div>
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+        <div class="form-group">
+          <label class="form-label" for="add-q-type">Question Type</label>
+          <select id="add-q-type" class="form-control">
+            <option value="Numerical" selected>Numerical (Integer)</option>
+            <option value="MCQ">MCQ</option>
+            <option value="Text">Text</option>
+            <option value="Multiple Answer">Multiple Answer</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="add-q-answer">Correct Answer</label>
+          <input type="text" id="add-q-answer" class="form-control" placeholder="e.g. 42" required>
+        </div>
+      </div>
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1.5rem;">
+        <div class="form-group">
+          <label class="form-label" for="add-q-start-bid">Starting Bid (₹)</label>
+          <input type="number" id="add-q-start-bid" class="form-control" value="500" min="50" step="50">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="add-q-reward">Bounty Reward (₹)</label>
+          <input type="number" id="add-q-reward" class="form-control" value="2000" min="100" step="100">
+        </div>
+      </div>
+
+      <div id="add-q-error-msg" style="display: none; color: var(--accent-red); margin-bottom: 1rem; font-weight: 600;"></div>
+      <div id="add-q-success-msg" style="display: none; color: #34d399; margin-bottom: 1rem; font-weight: 600;"></div>
+
+      <div style="display: flex; gap: 0.75rem; justify-content: flex-end;">
+        <button type="button" id="btn-cancel-add-question" class="btn btn-secondary">Cancel</button>
+        <button type="button" id="btn-submit-add-question" class="btn btn-gold" style="font-weight: 700;">Save Question</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/host_dashboard.js') }}"></script>
+{% endblock %}
